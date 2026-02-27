@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080C14">
+<title>Arc — Pickleball Vision Coach</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<style>
+  :root {
+    --bg: #080C14; --card: #111827; --card2: #1A2332;
+    --border: #1F2937; --green: #10B981; --green-dim: rgba(16,185,129,0.15);
+    --green-glow: rgba(16,185,129,0.4); --yellow: #F59E0B; --yellow-dim: rgba(245,158,11,0.15);
+    --red: #EF4444; --red-dim: rgba(239,68,68,0.15); --blue: #3B82F6;
+    --cyan: #06B6D4; --purple: #8B5CF6; --text: #F9FAFB;
+    --text-sec: #9CA3AF; --text-muted: #6B7280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Outfit', -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100dvh; overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .screen { display: none; min-height: 100dvh; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* HOME */
+  #home { padding: 48px 24px 40px; background: radial-gradient(ellipse at 50% 0%, rgba(16,185,129,0.08), transparent 60%), var(--bg); }
+  .logo-row { display: flex; align-items: center; gap: 10px; margin-bottom: 48px; }
+  .logo-icon { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--green), #059669); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 0 24px var(--green-glow); }
+  .logo-text { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 22px; letter-spacing: -0.5px; }
+  .logo-sub { font-family: 'JetBrains Mono'; font-size: 9px; color: var(--green); letter-spacing: 3px; text-transform: uppercase; }
+  .hero-title { font-size: 34px; font-weight: 800; line-height: 1.15; margin-bottom: 12px; letter-spacing: -0.5px; }
+  .hero-title .accent { color: var(--green); }
+  .hero-desc { font-size: 15px; color: var(--text-sec); line-height: 1.6; margin-bottom: 40px; max-width: 320px; }
+  .features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 36px; }
+  .feature-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--card); border-radius: 12px; border: 1px solid var(--border); }
+  .feature-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .feature-title { font-size: 14px; font-weight: 600; }
+  .feature-desc { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+  .btn-primary { width: 100%; padding: 16px; border: none; border-radius: 14px; cursor: pointer; background: linear-gradient(135deg, var(--green), #059669); color: #fff; font-size: 16px; font-weight: 700; font-family: 'Outfit'; box-shadow: 0 4px 24px var(--green-glow); transition: transform 0.1s; }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-secondary { width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 14px; cursor: pointer; background: transparent; color: var(--text-sec); font-size: 14px; font-weight: 500; font-family: 'Outfit'; }
+  .hint { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 12px; }
+
+  /* LOADING */
+  #loading { align-items: center; justify-content: center; padding: 40px; text-align: center; gap: 20px; }
+  .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-status { font-size: 14px; color: var(--text-sec); }
+  .load-detail { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono'; }
+
+  /* TRACKING */
+  #tracking { height: 100dvh; overflow: hidden; }
+  .track-top { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 10; flex-shrink: 0; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .track-top .left { display: flex; align-items: center; gap: 6px; }
+  .track-top .right { display: flex; gap: 6px; align-items: center; }
+  .tag { font-family: 'JetBrains Mono'; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
+  .tag-red { color: var(--red); }
+  .tag-gray { color: var(--text-sec); }
+  .btn-sm { padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer; font-family: 'JetBrains Mono'; font-size: 11px; }
+  .btn-toggle { background: rgba(255,255,255,0.1); color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-toggle.on { background: var(--green-dim); color: var(--green); border-color: rgba(16,185,129,0.4); }
+  .btn-end { background: var(--red-dim); color: var(--red); font-weight: 600; border: 1px solid rgba(239,68,68,0.3); font-family: 'Outfit'; }
+
+  .vision-container { position: relative; flex: 1; overflow: hidden; background: #0a0f1a; min-height: 0; }
+  #webcam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  #skeleton-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; transform: scaleX(-1); }
+  .grid-overlay { position: absolute; inset: 0; z-index: 1; opacity: 0.06; background-image: linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+
+  .score-badge { position: absolute; top: 10px; right: 10px; z-index: 5; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); border-radius: 12px; padding: 6px 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1); }
+  .score-label { font-family: 'JetBrains Mono'; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+  .score-value { font-family: 'JetBrains Mono'; font-size: 28px; font-weight: 800; line-height: 1; }
+
+  .coach-tip { position: absolute; bottom: 10px; left: 10px; right: 10px; z-index: 5; background: rgba(0,0,0,0.75); backdrop-filter: blur(10px); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; transition: all 0.3s; border: 1px solid rgba(255,255,255,0.1); }
+  .coach-tip .icon { font-size: 22px; flex-shrink: 0; }
+  .coach-tip .msg { font-size: 13px; font-weight: 500; line-height: 1.3; }
+
+  .metrics-panel { padding: 8px 10px 16px; flex-shrink: 0; background: var(--card); border-top: 1px solid var(--border); overflow-x: auto; }
+  .metrics-row { display: flex; gap: 5px; margin-bottom: 5px; }
+  .metric-card { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid; }
+  .metric-label { font-family: 'JetBrains Mono'; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 3px; margin-bottom: 3px; }
+  .metric-val { font-family: 'JetBrains Mono'; font-size: 17px; font-weight: 700; }
+  .metric-good { background: var(--green-dim); border-color: rgba(16,185,129,0.2); }
+  .metric-good .metric-val { color: var(--green); }
+  .metric-warn { background: var(--yellow-dim); border-color: rgba(245,158,11,0.2); }
+  .metric-warn .metric-val { color: var(--yellow); }
+  .metric-bad { background: var(--red-dim); border-color: rgba(239,68,68,0.2); }
+  .metric-bad .metric-val { color: var(--red); }
+  .metric-neutral { background: rgba(255,255,255,0.03); border-color: var(--border); }
+  .metric-neutral .metric-val { color: var(--text-sec); }
+
+  /* SUMMARY */
+  #summary { padding: 24px 20px 40px; overflow-y: auto; }
+  .summary-grade { text-align: center; margin-bottom: 24px; }
+  .grade-badge { display: inline-flex; width: 90px; height: 90px; border-radius: 22px; align-items: center; justify-content: center; font-family: 'JetBrains Mono'; font-size: 54px; font-weight: 800; margin: 12px 0; }
+  .summary-card { padding: 20px; background: var(--card); border-radius: 14px; border: 1px solid var(--border); margin-bottom: 12px; }
+  .summary-card h3 { font-family: 'JetBrains Mono'; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .breakdown-row { margin-bottom: 14px; }
+  .breakdown-row:last-child { margin-bottom: 0; }
+  .breakdown-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .breakdown-label { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; }
+  .breakdown-pct { font-family: 'JetBrains Mono'; font-size: 16px; font-weight: 700; }
+  .breakdown-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin-bottom: 3px; }
+  .breakdown-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+  .breakdown-detail { font-size: 11px; color: var(--text-muted); }
+  .insight-card { background: linear-gradient(135deg, var(--green-dim), rgba(59,130,246,0.08)); border: 1px solid rgba(16,185,129,0.15); border-radius: 14px; padding: 20px; margin-bottom: 12px; }
+  .insight-badge { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .insight-badge span:last-child { font-family: 'JetBrains Mono'; font-size: 12px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 1px; }
+  .insight-text { font-size: 14px; color: var(--text); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<!-- ====== HOME SCREEN ====== -->
+<div id="home" class="screen active">
+  <div class="logo-row">
+    <div class="logo-icon">🏓</div>
+    <div><div class="logo-text">arc</div><div class="logo-sub">vision coach</div></div>
+  </div>
+  <h1 class="hero-title">See your game<br>like a <span class="accent">coach</span> does.</h1>
+  <p class="hero-desc">Real-time body tracking and biomechanics analysis for pickleball. No sensors. No wearables. Just your camera.</p>
+  <div class="features">
+    <div class="feature-card"><div class="feature-icon" style="background:rgba(16,185,129,0.12)">🦴</div><div><div class="feature-title">Live Skeleton Tracking</div><div class="feature-desc">17-point body tracking at 30+ FPS</div></div></div>
+    <div class="feature-card"><div class="feature-icon" style="background:rgba(59,130,246,0.12)">📐</div><div><div class="feature-title">Joint Angle Analysis</div><div class="feature-desc">Knee bend, paddle height, stance width</div></div></div>
+    <div class="feature-card"><div class="feature-icon" style="background:rgba(139,92,246,0.12)">🧠</div><div><div class="feature-title">Real-Time Coaching</div><div class="feature-desc">Form corrections as you play</div></div></div>
+    <div class="feature-card"><div class="feature-icon" style="background:rgba(245,158,11,0.12)">📊</div><div><div class="feature-title">Session Analytics</div><div class="feature-desc">Post-session biomechanics breakdown</div></div></div>
+  </div>
+  <button class="btn-primary" onclick="startApp()">▶ Start Live Session</button>
+  <p class="hint">Uses your camera — all processing happens on-device</p>
+</div>
+
+<!-- ====== LOADING SCREEN ====== -->
+<div id="loading" class="screen">
+  <div class="logo-icon" style="width:64px;height:64px;font-size:32px;border-radius:16px;">🏓</div>
+  <div class="spinner"></div>
+  <div class="load-status" id="load-status">Loading AI model...</div>
+  <div class="load-detail" id="load-detail">TensorFlow.js MoveNet Thunder</div>
+</div>
+
+<!-- ====== TRACKING SCREEN ====== -->
+<div id="tracking" class="screen">
+  <div class="track-top">
+    <div class="left">
+      <div class="live-dot"></div>
+      <span class="tag tag-red mono" style="font-weight:700">LIVE</span>
+      <span class="tag tag-gray mono" id="session-time">0:00</span>
+    </div>
+    <div class="right">
+      <span class="mono" style="font-size:10px;color:var(--text-muted)" id="fps-display">-- FPS</span>
+      <button class="btn-sm btn-toggle on" id="btn-angles" onclick="toggleAngles()">📐</button>
+      <button class="btn-sm btn-end" onclick="endSession()">■ End</button>
+    </div>
+  </div>
+  <div class="vision-container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="skeleton-canvas"></canvas>
+    <div class="grid-overlay"></div>
+    <div class="score-badge">
+      <div class="score-label">Form</div>
+      <div class="score-value" id="score-value" style="color:var(--green)">—</div>
+    </div>
+    <div class="coach-tip" id="coach-tip" style="display:none">
+      <span class="icon" id="tip-icon">✅</span>
+      <span class="msg" id="tip-msg"></span>
+    </div>
+  </div>
+  <div class="metrics-panel">
+    <div class="metrics-row">
+      <div class="metric-card metric-neutral" id="m-knee"><div class="metric-label">🦵 Knee</div><div class="metric-val">—</div></div>
+      <div class="metric-card metric-neutral" id="m-paddle"><div class="metric-label">🏓 Paddle</div><div class="metric-val">—</div></div>
+      <div class="metric-card metric-neutral" id="m-stance"><div class="metric-label">👟 Stance</div><div class="metric-val">—</div></div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-card metric-neutral" id="m-elbow"><div class="metric-label">💪 Elbow</div><div class="metric-val">—</div></div>
+      <div class="metric-card metric-neutral" id="m-lean"><div class="metric-label">⚖️ Lean</div><div class="metric-val">—</div></div>
+      <div class="metric-card metric-neutral" id="m-frames"><div class="metric-label">🎬 Frames</div><div class="metric-val">0</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SUMMARY SCREEN ====== -->
+<div id="summary" class="screen"></div>
+
+<script>
+// ============================================
+// ARC VISION ENGINE
+// ============================================
+
+let detector = null;
+let video = null;
+let canvas = null;
+let ctx = null;
+let isTracking = false;
+let showAngles = true;
+let sessionStartTime = 0;
+let frameCount = 0;
+let lastFpsTime = 0;
+let fpsCount = 0;
+let currentFps = 0;
+let metricsHistory = [];
+let animId = null;
+
+// Skeleton connections for MoveNet 17 keypoints
+const CONNECTIONS = [
+  [5,6],[5,7],[7,9],[6,8],[8,10], // upper body
+  [5,11],[6,12],[11,12],          // torso
+  [11,13],[13,15],[12,14],[14,16] // legs
+];
+const KP_NAMES = ["nose","left_eye","right_eye","left_ear","right_ear","left_shoulder","right_shoulder","left_elbow","right_elbow","left_wrist","right_wrist","left_hip","right_hip","left_knee","right_knee","left_ankle","right_ankle"];
+
+// ============================================
+// SCREEN MANAGEMENT
+// ============================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ============================================
+// APP START
+// ============================================
+async function startApp() {
+  showScreen('loading');
+  try {
+    updateLoadStatus('Requesting camera access...', 'getUserMedia API');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+
+    video = document.getElementById('webcam');
+    video.srcObject = stream;
+    await new Promise(r => { video.onloadeddata = r; });
+
+    updateLoadStatus('Loading TensorFlow.js...', 'Setting up WebGL backend');
+    await tf.setBackend('webgl');
+    await tf.ready();
+
+    updateLoadStatus('Loading MoveNet model...', 'MoveNet Thunder — high accuracy mode');
+    detector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER, enableSmoothing: true }
+    );
+
+    updateLoadStatus('Ready!', 'Model loaded successfully');
+    setTimeout(() => startTracking(), 500);
+  } catch (err) {
+    updateLoadStatus('Error: ' + err.message, 'Check camera permissions');
+    console.error(err);
+  }
+}
+
+function updateLoadStatus(status, detail) {
+  document.getElementById('load-status').textContent = status;
+  document.getElementById('load-detail').textContent = detail;
+}
+
+// ============================================
+// TRACKING
+// ============================================
+function startTracking() {
+  showScreen('tracking');
+  canvas = document.getElementById('skeleton-canvas');
+  ctx = canvas.getContext('2d');
+  isTracking = true;
+  sessionStartTime = performance.now();
+  frameCount = 0;
+  fpsCount = 0;
+  lastFpsTime = performance.now();
+  metricsHistory = [];
+  detectLoop();
+  updateTimer();
+}
+
+function endSession() {
+  isTracking = false;
+  if (animId) cancelAnimationFrame(animId);
+  showSummary();
+}
+
+function toggleAngles() {
+  showAngles = !showAngles;
+  const btn = document.getElementById('btn-angles');
+  btn.classList.toggle('on', showAngles);
+}
+
+async function detectLoop() {
+  if (!isTracking) return;
+  try {
+    const poses = await detector.estimatePoses(video);
+    if (poses.length > 0) {
+      const kps = poses[0].keypoints;
+      resizeCanvas();
+      const metrics = analyzePose(kps);
+      drawSkeleton(kps, metrics);
+      updateMetricsUI(metrics);
+      updateCoachTip(metrics);
+      metricsHistory.push(metrics);
+      frameCount++;
+
+      // FPS
+      fpsCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        currentFps = fpsCount;
+        fpsCount = 0;
+        lastFpsTime = now;
+        document.getElementById('fps-display').textContent = currentFps + ' FPS';
+      }
+    }
+  } catch (e) { /* skip frame */ }
+  animId = requestAnimationFrame(detectLoop);
+}
+
+function resizeCanvas() {
+  if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  }
+}
+
+function updateTimer() {
+  if (!isTracking) return;
+  const elapsed = Math.floor((performance.now() - sessionStartTime) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  document.getElementById('session-time').textContent = m + ':' + String(s).padStart(2, '0');
+  setTimeout(updateTimer, 1000);
+}
+
+// ============================================
+// BIOMECHANICS ANALYZER
+// ============================================
+function analyzePose(kps) {
+  const kp = {};
+  kps.forEach((p, i) => { kp[KP_NAMES[i]] = p; });
+  const m = {};
+  const conf = n => kp[n] && kp[n].score > 0.25;
+
+  // Knee angles
+  if (conf('left_hip') && conf('left_knee') && conf('left_ankle'))
+    m.leftKnee = calcAngle(kp.left_hip, kp.left_knee, kp.left_ankle);
+  if (conf('right_hip') && conf('right_knee') && conf('right_ankle'))
+    m.rightKnee = calcAngle(kp.right_hip, kp.right_knee, kp.right_ankle);
+  if (m.leftKnee && m.rightKnee) m.avgKnee = (m.leftKnee + m.rightKnee) / 2;
+  else m.avgKnee = m.leftKnee || m.rightKnee || null;
+
+  m.readyGrade = !m.avgKnee ? 'unknown' :
+    m.avgKnee >= 125 && m.avgKnee <= 160 ? 'good' : m.avgKnee > 168 ? 'bad' : 'warn';
+
+  // Paddle height (right wrist vs shoulder vs hip) - mirrored since camera is mirrored
+  // Note: in selfie mode, visual "right hand" is actually left in data. We check both.
+  const wristL = kp.left_wrist, wristR = kp.right_wrist;
+  const shoulderL = kp.left_shoulder, shoulderR = kp.right_shoulder;
+  const hipL = kp.left_hip, hipR = kp.right_hip;
+
+  // Use whichever wrist is higher (more likely the paddle hand)
+  let paddleWrist = null, paddleShoulder = null, paddleHip = null;
+  if (conf('left_wrist') && conf('right_wrist')) {
+    if (wristL.y < wristR.y) { paddleWrist = wristL; paddleShoulder = shoulderL; paddleHip = hipL; }
+    else { paddleWrist = wristR; paddleShoulder = shoulderR; paddleHip = hipR; }
+  } else if (conf('left_wrist')) { paddleWrist = wristL; paddleShoulder = shoulderL; paddleHip = hipL; }
+  else if (conf('right_wrist')) { paddleWrist = wristR; paddleShoulder = shoulderR; paddleHip = hipR; }
+
+  if (paddleWrist && paddleShoulder && paddleHip) {
+    const midChest = (paddleShoulder.y + paddleHip.y) / 2;
+    m.paddleHeight = paddleWrist.y < midChest ? 'high' : paddleWrist.y < paddleHip.y ? 'mid' : 'low';
+  } else m.paddleHeight = 'unknown';
+
+  // Elbow angle (paddle arm)
+  if (paddleWrist) {
+    const idx = paddleWrist === wristL ? 'left' : 'right';
+    const sh = kp[idx + '_shoulder'], el = kp[idx + '_elbow'], wr = kp[idx + '_wrist'];
+    if (sh && el && wr && sh.score > 0.25 && el.score > 0.25)
+      m.elbowAngle = calcAngle(sh, el, wr);
+  }
+
+  // Stance width
+  if (conf('left_ankle') && conf('right_ankle') && conf('left_hip') && conf('right_hip')) {
+    const aw = Math.abs(kp.left_ankle.x - kp.right_ankle.x);
+    const hw = Math.abs(kp.left_hip.x - kp.right_hip.x);
+    m.stanceRatio = hw > 5 ? aw / hw : null;
+    m.stanceGrade = !m.stanceRatio ? 'unknown' :
+      m.stanceRatio >= 1.1 && m.stanceRatio <= 2.5 ? 'good' : m.stanceRatio < 1.1 ? 'bad' : 'warn';
+  } else { m.stanceRatio = null; m.stanceGrade = 'unknown'; }
+
+  // Lateral lean
+  if (conf('left_hip') && conf('right_hip') && conf('left_ankle') && conf('right_ankle')) {
+    const hipCx = (kp.left_hip.x + kp.right_hip.x) / 2;
+    const ankCx = (kp.left_ankle.x + kp.right_ankle.x) / 2;
+    m.lateralLean = hipCx - ankCx;
+  }
+
+  // Overall score
+  let score = 50;
+  if (m.readyGrade === 'good') score += 20;
+  else if (m.readyGrade === 'bad') score -= 15;
+  else if (m.readyGrade === 'warn') score -= 5;
+  if (m.stanceGrade === 'good') score += 15;
+  else if (m.stanceGrade === 'bad') score -= 10;
+  if (m.paddleHeight === 'high') score += 15;
+  else if (m.paddleHeight === 'mid') score += 5;
+  else if (m.paddleHeight === 'low') score -= 10;
+  m.score = Math.max(0, Math.min(100, score));
+
+  return m;
+}
+
+function calcAngle(a, b, c) {
+  const ba = { x: a.x - b.x, y: a.y - b.y };
+  const bc = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ba.x * bc.x + ba.y * bc.y;
+  const magA = Math.sqrt(ba.x * ba.x + ba.y * ba.y);
+  const magB = Math.sqrt(bc.x * bc.x + bc.y * bc.y);
+  if (magA === 0 || magB === 0) return null;
+  return Math.acos(Math.max(-1, Math.min(1, dot / (magA * magB)))) * (180 / Math.PI);
+}
+
+// ============================================
+// SKELETON RENDERER
+// ============================================
+function drawSkeleton(kps, metrics) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const w = canvas.width, h = canvas.height;
+  const sc = metrics.score || 50;
+  const baseColor = sc >= 70 ? '#10B981' : sc >= 40 ? '#F59E0B' : '#EF4444';
+
+  // Draw connections
+  CONNECTIONS.forEach(([i, j]) => {
+    const a = kps[i], b = kps[j];
+    if (a.score > 0.25 && b.score > 0.25) {
+      let color = baseColor;
+      // Color-code legs
+      if ([11,12,13,14,15,16].includes(i) || [11,12,13,14,15,16].includes(j)) {
+        color = metrics.readyGrade === 'good' ? '#10B981' : metrics.readyGrade === 'bad' ? '#EF4444' : '#F59E0B';
+      }
+      // Color-code paddle arm (whichever side has higher wrist)
+      const armJoints = [5,7,9,6,8,10];
+      if (armJoints.includes(i) || armJoints.includes(j)) {
+        color = metrics.paddleHeight === 'low' ? '#EF4444' : metrics.paddleHeight === 'high' ? '#10B981' : '#F59E0B';
+      }
+
+      // Glow
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.2;
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+      // Line
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // Draw joints
+  kps.forEach((kp, i) => {
+    if (kp.score > 0.25 && i >= 5) { // Skip face keypoints
+      const r = [5,6,11,12].includes(i) ? 6 : 4;
+      // Glow
+      ctx.fillStyle = baseColor;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(kp.x, kp.y, r + 5, 0, Math.PI * 2); ctx.fill();
+      // Dot
+      ctx.fillStyle = '#fff';
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(kp.x, kp.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // Angle annotations
+  if (showAngles) {
+    ctx.font = 'bold 13px "JetBrains Mono", monospace';
+    // Knee
+    if (metrics.avgKnee && kps[13].score > 0.25) {
+      const c = metrics.readyGrade === 'good' ? '#10B981' : metrics.readyGrade === 'bad' ? '#EF4444' : '#F59E0B';
+      drawLabel(kps[13].x + 18, kps[13].y, Math.round(metrics.avgKnee) + '°', c);
+    }
+    // Elbow
+    if (metrics.elbowAngle) {
+      const elIdx = kps[7].score > kps[8].score ? 7 : 8;
+      if (kps[elIdx].score > 0.25)
+        drawLabel(kps[elIdx].x + 18, kps[elIdx].y, Math.round(metrics.elbowAngle) + '°', '#06B6D4');
+    }
+  }
+}
+
+function drawLabel(x, y, text, color) {
+  const pad = 4;
+  const tw = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  roundRect(ctx, x - pad, y - 12, tw + pad * 2, 20, 4);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y + 2);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ============================================
+// UI UPDATES
+// ============================================
+function updateMetricsUI(m) {
+  updateMetric('m-knee', m.avgKnee ? Math.round(m.avgKnee) + '°' : '—', m.readyGrade === 'good' ? 'good' : m.readyGrade === 'bad' ? 'bad' : 'warn');
+  updateMetric('m-paddle', m.paddleHeight === 'unknown' ? '—' : m.paddleHeight.toUpperCase(), m.paddleHeight === 'high' ? 'good' : m.paddleHeight === 'low' ? 'bad' : m.paddleHeight === 'mid' ? 'warn' : 'neutral');
+  updateMetric('m-stance', m.stanceRatio ? m.stanceRatio.toFixed(1) + 'x' : '—', m.stanceGrade === 'good' ? 'good' : m.stanceGrade === 'bad' ? 'bad' : 'warn');
+  updateMetric('m-elbow', m.elbowAngle ? Math.round(m.elbowAngle) + '°' : '—', 'neutral');
+  updateMetric('m-lean', !m.lateralLean ? '—' : Math.abs(m.lateralLean) < 15 ? 'CTR' : m.lateralLean > 0 ? 'R' : 'L',
+    m.lateralLean && Math.abs(m.lateralLean) < 20 ? 'good' : 'warn');
+  updateMetric('m-frames', String(frameCount), 'neutral');
+
+  // Score badge
+  const sv = document.getElementById('score-value');
+  sv.textContent = m.score;
+  sv.style.color = m.score >= 70 ? 'var(--green)' : m.score >= 40 ? 'var(--yellow)' : 'var(--red)';
+}
+
+function updateMetric(id, value, status) {
+  const el = document.getElementById(id);
+  el.querySelector('.metric-val').textContent = value;
+  el.className = 'metric-card metric-' + (status || 'neutral');
+}
+
+let lastTipTime = 0;
+function updateCoachTip(m) {
+  const now = performance.now();
+  if (now - lastTipTime < 2000) return; // Don't update too fast
+
+  let tip = null;
+  if (m.readyGrade === 'bad') tip = { icon: '🦵', msg: 'Bend your knees — drop into an athletic crouch', color: 'var(--red)' };
+  else if (m.paddleHeight === 'low') tip = { icon: '🏓', msg: 'Paddle up! Keep it at chest height, ready to react', color: 'var(--red)' };
+  else if (m.stanceGrade === 'bad') tip = { icon: '👟', msg: 'Widen your stance — feet shoulder-width plus', color: 'var(--yellow)' };
+  else if (m.score >= 70) tip = { icon: '✅', msg: 'Great ready position — athletic, balanced, paddle up', color: 'var(--green)' };
+  else if (m.readyGrade === 'warn') tip = { icon: '🦵', msg: 'A little more knee bend for quicker reactions', color: 'var(--yellow)' };
+
+  const tipEl = document.getElementById('coach-tip');
+  if (tip) {
+    document.getElementById('tip-icon').textContent = tip.icon;
+    const msgEl = document.getElementById('tip-msg');
+    msgEl.textContent = tip.msg;
+    msgEl.style.color = tip.color;
+    tipEl.style.display = 'flex';
+    tipEl.style.borderColor = tip.color.replace('var(--', '').replace(')', '') === 'green' ? 'rgba(16,185,129,0.3)' :
+      tip.color.includes('red') ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)';
+    lastTipTime = now;
+  }
+}
+
+// ============================================
+// SESSION SUMMARY
+// ============================================
+function showSummary() {
+  showScreen('summary');
+  const h = metricsHistory;
+  if (h.length === 0) { showScreen('home'); return; }
+
+  const avg = Math.round(h.reduce((s, m) => s + m.score, 0) / h.length);
+  const goodKnee = h.filter(m => m.readyGrade === 'good').length;
+  const goodPaddle = h.filter(m => m.paddleHeight === 'high' || m.paddleHeight === 'mid').length;
+  const goodStance = h.filter(m => m.stanceGrade === 'good').length;
+  const kneePct = Math.round(goodKnee / h.length * 100);
+  const paddlePct = Math.round(goodPaddle / h.length * 100);
+  const stancePct = Math.round(goodStance / h.length * 100);
+  const avgKnee = h.filter(m => m.avgKnee).reduce((s, m) => s + m.avgKnee, 0) / Math.max(h.filter(m => m.avgKnee).length, 1);
+
+  const grade = avg >= 75 ? 'A' : avg >= 60 ? 'B' : avg >= 45 ? 'C' : 'D';
+  const gc = grade === 'A' ? 'var(--green)' : grade === 'B' ? 'var(--blue)' : grade === 'C' ? 'var(--yellow)' : 'var(--red)';
+  const gcBg = grade === 'A' ? 'var(--green-dim)' : grade === 'B' ? 'rgba(59,130,246,0.15)' : grade === 'C' ? 'var(--yellow-dim)' : 'var(--red-dim)';
+
+  const elapsed = Math.floor((performance.now() - sessionStartTime) / 1000);
+  const timeStr = Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0');
+
+  // Insight text
+  let insight = '';
+  if (kneePct < 50) insight = "Your biggest opportunity is knee bend. You spent most of the session standing too upright, which slows your reaction time. Focus on dropping your hips 2-3 inches lower. Think \"sitting on a barstool\" not \"standing at a counter.\"";
+  else if (paddlePct < 50) insight = "Your ready position is solid, but your paddle keeps dropping between shots. Every time it drops below your waist, you're adding reaction time on the next volley. Try keeping your non-paddle hand touching the paddle face as a reminder.";
+  else insight = "Strong session. Your form was solid across all dimensions. Focus on maintaining this quality deeper into sessions when fatigue kicks in. Average form score: " + avg + "/100.";
+
+  document.getElementById('summary').innerHTML = `
+    <div class="summary-grade">
+      <div style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono';text-transform:uppercase;letter-spacing:2px">Session Complete</div>
+      <div class="grade-badge" style="background:${gcBg};border:2px solid ${gc}40;color:${gc}">${grade}</div>
+      <div style="font-size:22px;font-weight:700">Overall Form Grade</div>
+      <div style="font-size:14px;color:var(--text-sec);margin-top:4px">${timeStr} session — ${h.length} frames analyzed at ${currentFps} FPS</div>
+    </div>
+    <div class="summary-card">
+      <h3>Biomechanics Breakdown</h3>
+      ${breakdownRow('🦵', 'Ready Position', kneePct, 'Avg angle: ' + Math.round(avgKnee) + '° — Target: 130-155°')}
+      ${breakdownRow('🏓', 'Paddle Position', paddlePct, 'Time paddle at mid-chest height or higher')}
+      ${breakdownRow('👟', 'Stance Width', stancePct, 'Time in proper athletic stance width')}
+    </div>
+    <div class="insight-card">
+      <div class="insight-badge"><span style="font-size:18px">🧠</span><span>AI Coach Insight</span></div>
+      <div class="insight-text">${insight}</div>
+    </div>
+    <button class="btn-primary" onclick="restart()" style="margin-top:12px">New Session</button>
+    <button class="btn-secondary" onclick="showScreen('home')" style="margin-top:10px">Back to Home</button>
+  `;
+}
+
+function breakdownRow(icon, label, pct, detail) {
+  const c = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
+  return `<div class="breakdown-row">
+    <div class="breakdown-header">
+      <div class="breakdown-label">${icon} ${label}</div>
+      <div class="breakdown-pct" style="color:${c}">${pct}%</div>
+    </div>
+    <div class="breakdown-bar"><div class="breakdown-fill" style="width:${pct}%;background:linear-gradient(90deg,${c},${c}aa)"></div></div>
+    <div class="breakdown-detail">${detail}</div>
+  </div>`;
+}
+
+function restart() {
+  metricsHistory = [];
+  frameCount = 0;
+  startTracking();
+}
+</script>
+</body>
+</html>
